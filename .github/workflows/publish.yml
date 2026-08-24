@@ -41,7 +41,19 @@ jobs:
       - run: npm run build
       - name: Publish with provenance
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Verify registry metadata
-        run: npm view sitepilot-mcp@0.1.0 name version dist.integrity dist.tarball --json
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          for attempt in {1..20}; do
+            if npm view "sitepilot-mcp@${version}" name version dist.integrity dist.tarball --json; then
+              exit 0
+            fi
+
+            if [[ "${attempt}" -eq 20 ]]; then
+              echo "sitepilot-mcp@${version} was not visible after 20 attempts" >&2
+              exit 1
+            fi
+
+            sleep 15
+          done
