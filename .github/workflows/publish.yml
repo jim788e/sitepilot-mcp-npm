@@ -1,0 +1,47 @@
+name: Publish npm package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@12.0.2
+      - name: Require green CI for this exact commit
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "ci.yml",
+              head_sha: context.sha,
+              status: "completed",
+              per_page: 20,
+            });
+            const passed = data.workflow_runs.some(run => run.conclusion === "success");
+            if (!passed) core.setFailed(`No successful CI run exists for ${context.sha}.`);
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Verify registry metadata
+        run: npm view sitepilot-mcp@0.1.0 name version dist.integrity dist.tarball --json
