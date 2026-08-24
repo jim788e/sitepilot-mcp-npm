@@ -3,6 +3,7 @@ import type { CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult
 import type { AuthStrategy, FetchLike } from "./auth/strategy.js";
 import { authenticatedFetch } from "./auth/strategy.js";
 import { discoverSite, type ApiVersion, type DiscoveryResult } from "./discovery.js";
+import { PACKAGE_VERSION } from "./version.js";
 
 export interface RemoteClient {
   connect(): Promise<DiscoveryResult>;
@@ -37,7 +38,7 @@ export class RemoteMcpClient implements RemoteClient {
       fetch: timedFetch,
       onInsufficientScope: "throw",
     });
-    const client = new Client({ name: "sitepilot-mcp-proxy", version: "0.1.0" }, { capabilities: {} });
+    const client = new Client({ name: "sitepilot-mcp-proxy", version: PACKAGE_VERSION }, { capabilities: {} });
     await client.connect(transport);
     this.client = client;
     this.transport = transport;

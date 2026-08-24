@@ -11,8 +11,8 @@ import { RemoteMcpClient } from "./proxy.js";
 import { structuredResult } from "./render.js";
 import { serveSitePilotHttp } from "./transport/http.js";
 import { serveSitePilotStdio } from "./transport/stdio.js";
+import { PACKAGE_VERSION } from "./version.js";
 
-const VERSION = "0.1.0";
 const COMMANDS = new Set(["login", "logout", "init", "doctor", "tools", "call"]);
 
 interface ParsedArgs extends ConfigInput {
@@ -94,7 +94,7 @@ async function runRemoteCommand(args: ParsedArgs): Promise<void> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.version) {
-    print(VERSION);
+    print(PACKAGE_VERSION);
     return;
   }
   if (args.command === "login") {

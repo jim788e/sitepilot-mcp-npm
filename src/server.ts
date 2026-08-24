@@ -4,6 +4,7 @@ import type { RuntimeConfig } from "./config.js";
 import { runPreflight, observeSiteVersion, preflightSummary, type PreflightState } from "./preflight.js";
 import { RemoteMcpClient, toolBySuffix, type RemoteClient } from "./proxy.js";
 import { renderToolResult, structuredResult } from "./render.js";
+import { PACKAGE_VERSION } from "./version.js";
 
 export interface ProxyServerHandle {
   server: Server;
@@ -46,7 +47,7 @@ export async function createProxyServer(
   const remote = remoteFactory();
   const preflight = await runPreflight(remote, config.auth);
   const server = new Server(
-    { name: "sitepilot-mcp", version: "0.1.0" },
+    { name: "sitepilot-mcp", version: PACKAGE_VERSION },
     { capabilities: { tools: {} }, instructions: preflightSummary(preflight) },
   );
   server.setRequestHandler("tools/list", async () => preflight.tools);
