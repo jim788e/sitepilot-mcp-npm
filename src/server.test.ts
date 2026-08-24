@@ -1,6 +1,7 @@
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type { CallToolRequest, CallToolResult, ListToolsResult, Tool } from "@modelcontextprotocol/client";
 import { TOOL_NAMES } from "@instantbuild-sitepilot/contracts";
+import packageManifest from "../package.json" with { type: "json" };
 import { describe, expect, it } from "vitest";
 import { BearerStrategy } from "./auth/bearer.js";
 import type { RuntimeConfig } from "./config.js";
@@ -81,6 +82,7 @@ describe("passthrough server", () => {
     await handle.server.connect(serverTransport);
     const client = new Client({ name: "test-client", version: "1.0.0" }, { capabilities: {} });
     await client.connect(clientTransport);
+    expect(client.getServerVersion()?.version).toBe(packageManifest.version);
     const listed = await client.listTools();
     expect(listed.tools.map(tool => tool.name)).toEqual(remoteTools.map(tool => tool.name));
     const input = { arbitrary: { nested: true } };
