@@ -14,6 +14,13 @@ jobs:
     environment: npm
     steps:
       - uses: actions/checkout@v7
+      - name: Require the protected main branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Refusing to publish from $GITHUB_REF; dispatch publish.yml from main." >&2
+            exit 1
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -21,6 +28,15 @@ jobs:
           cache: npm
       - name: Use an OIDC-capable npm CLI
         run: npm install --global npm@12.0.2
+      - name: Refuse an already-published version
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "sitepilot-mcp@${version}" version --json >/dev/null 2>&1; then
+            echo "sitepilot-mcp@${version} already exists; refusing to republish it." >&2
+            exit 1
+          fi
+          echo "sitepilot-mcp@${version} is unpublished."
       - name: Require green CI for this exact commit
         uses: actions/github-script@v8
         with:

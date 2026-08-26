@@ -26,14 +26,16 @@ describe("Application Password login", () => {
         setTimeout(() => void fetch(callback), 0);
       },
       fetch: async (input, init) => {
-        requested.push(new URL(input instanceof Request ? input.url : input.toString()).pathname);
+        const pathname = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+        requested.push(pathname);
         expect(new Headers(init?.headers).get("authorization")).toBe(`Basic ${Buffer.from("alice:private-app-password").toString("base64")}`);
+        if (pathname.endsWith("/inspect-site")) return Response.json({ builders: { gutenberg: true, elementor: "4.2.3", enfold: { active: false } }, woocommerce: { active: true, version: "11.0.1" } });
         return Response.json({ scopes: ["site:read"] }, { status: 201 });
       },
     });
 
-    expect(result).toEqual({ profile: "example", scopes: ["site:read"], authKind: "app-password" });
-    expect(requested).toEqual(["/wp-admin/authorize-application.php", "/wp-json/sitepilot-mcp/v2/credentials/claim"]);
+    expect(result).toEqual({ profile: "example", scopes: ["site:read"], authKind: "app-password", summary: "Elementor 4.2.3 detected · WooCommerce 11.0.1" });
+    expect(requested).toEqual(["/wp-admin/authorize-application.php", "/wp-json/sitepilot-mcp/v2/credentials/claim", "/wp-json/sitepilot-mcp/v1/ops/inspect-site"]);
     const profile = await readFile(profileFile, "utf8");
     expect(profile).toContain("private-app-password");
     expect(profile).not.toContain("Basic ");

@@ -1,6 +1,6 @@
 {
   "name": "sitepilot-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Local MCP transport and authentication adapter for the SitePilot WordPress plugin",
   "license": "Apache-2.0",
   "repository": {

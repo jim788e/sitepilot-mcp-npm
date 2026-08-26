@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Scope } from "@instantbuild-sitepilot/contracts";
 import { OAuthStrategy } from "./auth/oauth.js";
 import { deleteProfile, readProfiles, resolveConfig, type ConfigInput } from "./config.js";
 import { diagnose } from "./doctor.js";
-import { initializeClients, type ClientName } from "./init.js";
+import { assertSecureSiteUrl, normalizeSiteUrl } from "./discovery.js";
+import { initializeClients, normalizeClientSelection } from "./init.js";
 import { login, parseScopeList } from "./login.js";
 import { runPreflight } from "./preflight.js";
 import { RemoteMcpClient } from "./proxy.js";
@@ -26,6 +29,7 @@ interface ParsedArgs extends ConfigInput {
   input?: string;
   json?: boolean;
   dryRun?: boolean;
+  remote?: boolean;
   version?: boolean;
   noColor?: boolean;
 }
@@ -47,7 +51,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const [rawName, inline] = value.slice(2).split(/=(.*)/su, 2);
     if (!rawName) continue;
     const name = camel(rawName);
-    if (["oauth", "readOnly", "json", "dryRun", "version", "noColor"].includes(name)) result[name] = inline === undefined ? true : inline !== "false";
+    if (["oauth", "readOnly", "json", "dryRun", "remote", "version", "noColor"].includes(name)) result[name] = inline === undefined ? true : inline !== "false";
     else result[name] = inline ?? args.shift();
   }
   return result as unknown as ParsedArgs;
@@ -106,7 +110,7 @@ async function main(): Promise<void> {
       ...(args.profile ? { profile: args.profile } : {}),
       oauth: args.oauth ?? false,
     });
-    print(`Saved profile ${result.profile}. Granted ${result.scopes.join(", ")} via ${result.authKind}.`);
+    print(`Saved profile ${result.profile}. Granted ${result.scopes.join(", ")} via ${result.authKind}. ${result.summary}.`);
     return;
   }
   if (args.command === "logout") {
@@ -118,15 +122,27 @@ async function main(): Promise<void> {
     return;
   }
   if (args.command === "init") {
-    const name = args.profile ?? process.env.SITEPILOT_PROFILE;
-    if (!name) throw new Error("sitepilot-mcp init requires --profile or SITEPILOT_PROFILE.");
-    const profile = (await readProfiles()).profiles[name];
-    if (!profile) throw new Error(`Profile ${name} does not exist. Run sitepilot-mcp login first.`);
-    const client = (args.client ?? "all") as ClientName | "all";
-    if (!["cursor", "claude-desktop", "claude-code", "windsurf", "all"].includes(client)) throw new Error("--client must be cursor, claude-desktop, claude-code, windsurf, or all.");
-    const results = await initializeClients(client, name, profile.url);
-    for (const result of results) print(`${result.client}: ${result.path}${result.backup ? ` (backup ${result.backup})` : ""}`);
-    print("Restart the configured client to load SitePilot MCP.");
+    let name = args.profile ?? process.env.SITEPILOT_PROFILE;
+    let url: string;
+    if (args.remote && args.url) {
+      const remoteUrl = normalizeSiteUrl(args.url);
+      assertSecureSiteUrl(remoteUrl);
+      url = remoteUrl.toString();
+      name ??= `remote-${remoteUrl.hostname.replace(/[^a-z0-9-]+/giu, "-").toLowerCase()}`;
+    } else {
+      if (!name) throw new Error("sitepilot-mcp init requires --profile, or --remote with --url.");
+      const profile = (await readProfiles()).profiles[name];
+      if (!profile) throw new Error(`Profile ${name} does not exist. Run sitepilot-mcp login first.`);
+      url = profile.url;
+    }
+    const client = normalizeClientSelection(args.client ?? "all");
+    if (!client) throw new Error("--client must be claude-code, claude-desktop, codex, cursor, agy, antigravity-cli, antigravity-ide, windsurf, major, or all.");
+    const results = await initializeClients(client, name, url, { remote: args.remote ?? false });
+    for (const result of results) {
+      if (result.status === "skipped") print(`${result.client}: skipped (${result.reason})`);
+      else print(`${result.client}: ${result.path}${result.rulesPath ? ` + ${result.rulesPath}` : ""}${result.backup ? ` (backup ${result.backup})` : ""}`);
+    }
+    for (const instruction of [...new Set(results.filter(result => result.status === "written").map(result => result.restart))]) print(instruction);
     return;
   }
   if (args.command === "doctor") {
@@ -149,8 +165,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(error => {
-  const text = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${text}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch(error => {
+    const text = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${text}\n`);
+    process.exitCode = 1;
+  });
+}

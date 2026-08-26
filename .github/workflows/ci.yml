@@ -9,6 +9,46 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install pinned Gitleaks
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/gitleaks_8.30.1_linux_x64.tar.gz"
+          install_dir="$RUNNER_TEMP/gitleaks-8.30.1"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check --strict
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir" gitleaks
+          echo "$install_dir" >> "$GITHUB_PATH"
+      - name: Scan complete history and current files
+        run: |
+          gitleaks git --config .gitleaks.toml --redact --no-banner --log-opts="--all" .
+          gitleaks dir --config .gitleaks.toml --redact --no-banner .
+      - name: Prove the secret scanner fails closed
+        shell: bash
+        run: |
+          red_file="$RUNNER_TEMP/sitepilot-gitleaks-red-test.txt"
+          red_log="$RUNNER_TEMP/sitepilot-gitleaks-red-test.log"
+          printf 'AWS_ACCESS_KEY_ID=AKIA%s%s\n' 'QX4Q7U2Z' 'MN4C6XYZ' > "$red_file"
+          set +e
+          gitleaks dir --config .gitleaks.toml --redact --no-banner --verbose "$red_file" > "$red_log" 2>&1
+          status=$?
+          set -e
+          rm -f "$red_file"
+          cat "$red_log"
+          if [ "$status" -eq 0 ]; then
+            echo "Gitleaks accepted the deliberate synthetic credential." >&2
+            exit 1
+          fi
+          grep --fixed-strings 'sitepilot-gitleaks-red-test.txt' "$red_log"
+
   test:
     strategy:
       matrix:
