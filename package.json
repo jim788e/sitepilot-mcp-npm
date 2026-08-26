@@ -36,7 +36,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "node --test scripts/*.test.mjs && vitest run src",
     "prepack": "npm run build"
   },
   "dependencies": {

@@ -37,6 +37,86 @@ jobs:
             exit 1
           fi
           echo "sitepilot-mcp@${version} is unpublished."
+      - name: Require the protected private-CI read credential
+        shell: bash
+        env:
+          PRODUCT_CI_READ_TOKEN: ${{ secrets.PRODUCT_CI_READ_TOKEN }}
+        run: |
+          if [ -z "$PRODUCT_CI_READ_TOKEN" ]; then
+            echo "PRODUCT_CI_READ_TOKEN is unavailable; refusing publication." >&2
+            exit 1
+          fi
+      - name: Require successful authoritative product artifact parity
+        id: product-parity
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.PRODUCT_CI_READ_TOKEN }}
+          script: |
+            const fs = require("node:fs");
+            const source = JSON.parse(fs.readFileSync(".sitepilot-product-source.json", "utf8"));
+            if (source.product_repository !== "jim788e/sitepilot-mcp" ||
+                !/^[0-9a-f]{40}$/.test(source.product_sha) ||
+                source.workflow !== "ci.yml" ||
+                source.job !== "npm-artifact-parity") {
+              core.setFailed("Invalid authoritative product source binding.");
+              return;
+            }
+            const [owner, repo] = source.product_repository.split("/");
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: source.workflow,
+              head_sha: source.product_sha,
+              status: "completed",
+              per_page: 20,
+            });
+            for (const run of data.workflow_runs) {
+              if (run.conclusion !== "success") continue;
+              const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+                owner,
+                repo,
+                run_id: run.id,
+                filter: "latest",
+                per_page: 100,
+              });
+              const parityJob = jobs.jobs.find(job =>
+                job.name === source.job && job.conclusion === "success"
+              );
+              if (!parityJob) continue;
+              const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+              const artifactName = `npm-artifact-parity-${source.product_sha}`;
+              const artifact = artifacts.artifacts.find(item =>
+                item.name === artifactName && !item.expired
+              );
+              if (!artifact) continue;
+              core.setOutput("run-id", String(run.id));
+              core.setOutput("artifact-name", artifactName);
+              core.setOutput("product-sha", source.product_sha);
+              return;
+            }
+            core.setFailed(`No successful authoritative parity artifact exists for ${source.product_sha}.`);
+      - name: Download immutable authoritative parity attestation
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.product-parity.outputs.artifact-name }}
+          path: ${{ runner.temp }}/product-parity
+          github-token: ${{ secrets.PRODUCT_CI_READ_TOKEN }}
+          repository: jim788e/sitepilot-mcp
+          run-id: ${{ steps.product-parity.outputs.run-id }}
+      - name: Verify parity attestation binds this exact release
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          node scripts/verify-product-parity-attestation.mjs \
+            "$RUNNER_TEMP/product-parity/npm-artifact-parity-attestation.json" \
+            "${{ steps.product-parity.outputs.product-sha }}" \
+            "$GITHUB_SHA" \
+            "$version"
       - name: Require green CI for this exact commit
         uses: actions/github-script@v8
         with:
