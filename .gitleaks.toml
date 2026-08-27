@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Non-secret idempotency examples in tests and documentation"
+regexTarget = "secret"
+regexes = [
+  '''^o2-self-approval-denial$''',
+  '''^c8a6f23d-49d1-4be1-91a5-e23f8b9101ab$''',
+  '''^7ce39168-af6a-46c0-94b8-d26093427cfb$''',
+  '''^a-unique-key-at-least-16-characters$''',
+]

@@ -2,12 +2,26 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { Scope } from "@instantbuild-sitepilot/contracts";
 import { ApplicationPasswordStrategy } from "./auth/app-password.js";
-import { authorizeOAuth, openBrowser } from "./auth/oauth.js";
+import { authorizeOAuth, OAuthStrategy, openBrowser } from "./auth/oauth.js";
 import { authenticatedFetch, type FetchLike } from "./auth/strategy.js";
 import { normalizeSiteUrl, assertSecureSiteUrl } from "./discovery.js";
 import { saveProfile, type StoredProfile } from "./config.js";
 
 export const DEFAULT_SCOPES: Scope[] = ["site:read"];
+
+interface SiteInspection {
+  builders?: { elementor?: string | false; enfold?: { active?: boolean; version?: string | null }; gutenberg?: boolean };
+  woocommerce?: { active?: boolean; version?: string | null };
+}
+
+export function summarizeSite(inspection: SiteInspection): string {
+  const detected: string[] = [];
+  if (typeof inspection.builders?.elementor === "string") detected.push(`Elementor ${inspection.builders.elementor} detected`);
+  if (inspection.builders?.enfold?.active) detected.push(`Enfold ${inspection.builders.enfold.version ?? "active"} detected`);
+  if (!detected.length && inspection.builders?.gutenberg) detected.push("Gutenberg detected");
+  detected.push(inspection.woocommerce?.active ? `WooCommerce ${inspection.woocommerce.version ?? "active"}` : "WooCommerce inactive");
+  return detected.join(" · ");
+}
 
 export function parseScopeList(value?: string): Scope[] {
   const scopes = (value ? value.split(",") : DEFAULT_SCOPES).map(scope => scope.trim()).filter(Boolean) as Scope[];
@@ -84,7 +98,7 @@ async function claimCredential(siteUrl: URL, auth: ApplicationPasswordStrategy, 
 export async function login(
   input: { url: string; scopes?: string; label?: string; profile?: string; oauth?: boolean },
   options: { fetch?: FetchLike; launch?: (url: string) => void; profileFile?: string; timeoutMs?: number } = {},
-): Promise<{ profile: string; scopes: Scope[]; authKind: "app-password" | "oauth" }> {
+): Promise<{ profile: string; scopes: Scope[]; authKind: "app-password" | "oauth"; summary: string }> {
   const siteUrl = normalizeSiteUrl(input.url);
   assertSecureSiteUrl(siteUrl);
   const scopes = parseScopeList(input.scopes);
@@ -94,6 +108,7 @@ export async function login(
   let profile: StoredProfile;
   let authKind: "app-password" | "oauth";
   let grantedScopes: Scope[];
+  let runtimeAuth: ApplicationPasswordStrategy | OAuthStrategy;
   if (input.oauth) {
     const credentials = await authorizeOAuth(siteUrl, scopes, label, {
       fetch: fetchImpl,
@@ -101,6 +116,7 @@ export async function login(
       ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     });
     profile = { url: siteUrl.toString(), auth: { kind: "oauth", ...credentials } };
+    runtimeAuth = new OAuthStrategy(credentials, fetchImpl);
     authKind = "oauth";
     grantedScopes = credentials.scopes;
   } else {
@@ -109,11 +125,18 @@ export async function login(
       ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     });
     const auth = new ApplicationPasswordStrategy(credential.username, credential.password);
+    runtimeAuth = auth;
     const granted = await claimCredential(siteUrl, auth, scopes, label, fetchImpl);
     profile = { url: siteUrl.toString(), auth: { kind: "app-password", ...credential, scopes: granted } };
     authKind = "app-password";
     grantedScopes = granted;
   }
   await saveProfile(profileName, profile, options.profileFile);
-  return { profile: profileName, scopes: grantedScopes, authKind };
+  const inspectionResponse = await authenticatedFetch(runtimeAuth, fetchImpl)(
+    new URL("wp-json/sitepilot-mcp/v1/ops/inspect-site", siteUrl),
+    { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: "{}" },
+  );
+  const inspection = await inspectionResponse.json() as SiteInspection & { code?: string; message?: string };
+  if (!inspectionResponse.ok) throw new Error(inspection.message ?? inspection.code ?? `Site inspection failed with HTTP ${inspectionResponse.status}.`);
+  return { profile: profileName, scopes: grantedScopes, authKind, summary: summarizeSite(inspection) };
 }

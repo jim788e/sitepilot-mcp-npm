@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+/bottoken.txt
 *.tgz
 *.log
 .DS_Store

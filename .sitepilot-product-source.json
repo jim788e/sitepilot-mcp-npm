@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "product_repository": "jim788e/sitepilot-mcp",
+  "product_sha": "f9e2bbb6b12842ccaf930f8516239029a07fc390",
+  "workflow": "ci.yml",
+  "job": "npm-artifact-parity"
+}
