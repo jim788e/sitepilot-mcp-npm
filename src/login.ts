@@ -131,12 +131,12 @@ export async function login(
     authKind = "app-password";
     grantedScopes = granted;
   }
+  await saveProfile(profileName, profile, options.profileFile);
   const inspectionResponse = await authenticatedFetch(runtimeAuth, fetchImpl)(
     new URL("wp-json/sitepilot-mcp/v1/ops/inspect-site", siteUrl),
     { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: "{}" },
   );
   const inspection = await inspectionResponse.json() as SiteInspection & { code?: string; message?: string };
   if (!inspectionResponse.ok) throw new Error(inspection.message ?? inspection.code ?? `Site inspection failed with HTTP ${inspectionResponse.status}.`);
-  await saveProfile(profileName, profile, options.profileFile);
   return { profile: profileName, scopes: grantedScopes, authKind, summary: summarizeSite(inspection) };
 }

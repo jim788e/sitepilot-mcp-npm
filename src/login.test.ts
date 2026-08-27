@@ -40,4 +40,43 @@ describe("Application Password login", () => {
     expect(profile).toContain("private-app-password");
     expect(profile).not.toContain("Basic ");
   });
+
+  it("preserves the issued credential when optional site inspection fails", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sitepilot-login-inspection-failure-"));
+    const profileFile = join(root, "profiles.json");
+
+    await expect(login({
+      url: "https://example.com",
+      scopes: "site:read",
+      label: "inspection failure test",
+      profile: "example",
+    }, {
+      profileFile,
+      timeoutMs: 2_000,
+      launch: url => {
+        const authorize = new URL(url);
+        const callback = new URL(authorize.searchParams.get("success_url")!);
+        callback.searchParams.set("user_login", "alice");
+        callback.searchParams.set("password", "preserved-app-password");
+        setTimeout(() => void fetch(callback), 0);
+      },
+      fetch: async input => {
+        const pathname = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+        if (pathname.endsWith("/inspect-site")) {
+          return Response.json({ code: "inspection_unavailable" }, { status: 503 });
+        }
+        return Response.json({ scopes: ["site:read"] }, { status: 201 });
+      },
+    })).rejects.toThrow("inspection_unavailable");
+
+    const stored = JSON.parse(await readFile(profileFile, "utf8")) as {
+      profiles: Record<string, { auth: { kind: string; username: string; password: string; scopes: string[] } }>;
+    };
+    expect(stored.profiles.example?.auth).toEqual({
+      kind: "app-password",
+      username: "alice",
+      password: "preserved-app-password",
+      scopes: ["site:read"],
+    });
+  });
 });
