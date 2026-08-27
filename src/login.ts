@@ -132,11 +132,16 @@ export async function login(
     grantedScopes = granted;
   }
   await saveProfile(profileName, profile, options.profileFile);
-  const inspectionResponse = await authenticatedFetch(runtimeAuth, fetchImpl)(
-    new URL("wp-json/sitepilot-mcp/v1/ops/inspect-site", siteUrl),
-    { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: "{}" },
-  );
-  const inspection = await inspectionResponse.json() as SiteInspection & { code?: string; message?: string };
-  if (!inspectionResponse.ok) throw new Error(inspection.message ?? inspection.code ?? `Site inspection failed with HTTP ${inspectionResponse.status}.`);
-  return { profile: profileName, scopes: grantedScopes, authKind, summary: summarizeSite(inspection) };
+  try {
+    const inspectionResponse = await authenticatedFetch(runtimeAuth, fetchImpl)(
+      new URL("wp-json/sitepilot-mcp/v1/ops/inspect-site", siteUrl),
+      { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: "{}" },
+    );
+    const inspection = await inspectionResponse.json() as SiteInspection & { code?: string; message?: string };
+    if (!inspectionResponse.ok) throw new Error(inspection.message ?? inspection.code ?? `Site inspection failed with HTTP ${inspectionResponse.status}.`);
+    return { profile: profileName, scopes: grantedScopes, authKind, summary: summarizeSite(inspection) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Profile "${profileName}" was saved, but optional site inspection failed: ${detail}`);
+  }
 }

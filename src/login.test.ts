@@ -67,7 +67,7 @@ describe("Application Password login", () => {
         }
         return Response.json({ scopes: ["site:read"] }, { status: 201 });
       },
-    })).rejects.toThrow("inspection_unavailable");
+    })).rejects.toThrow('Profile "example" was saved, but optional site inspection failed: inspection_unavailable');
 
     const stored = JSON.parse(await readFile(profileFile, "utf8")) as {
       profiles: Record<string, { auth: { kind: string; username: string; password: string; scopes: string[] } }>;
