@@ -18,7 +18,7 @@ describe("profile and client initialization", () => {
     await writeFile(configPath, JSON.stringify({ mcpServers: { existing: { command: "existing" } }, keep: true }), "utf8");
     const result = await writeClientConfig("cursor", "example-prod", "https://example.com/", { cwd: root, home: root, appData: root });
     const text = await readFile(result.path, "utf8");
-    expect(text).toContain("sitepilot-mcp@0.1.3");
+    expect(text).toContain("sitepilot-mcp@0.1.4");
     expect(text).toContain("example-prod");
     expect(text).toContain("existing");
     expect(text).toContain('"keep": true');
@@ -28,12 +28,25 @@ describe("profile and client initialization", () => {
     expect(await readFile(join(root, ".cursorrules"), "utf8")).toContain(OPERATING_RULES.trim());
   });
 
-  it("writes native remote MCP without a credential or npm command", async () => {
+  it("uses discovery by default and pins explicitly selected Claude Code OAuth scopes", async () => {
     const root = await mkdtemp(join(tmpdir(), "sitepilot-remote-init-"));
     const result = await writeClientConfig("claude-code", "example", "https://example.com/", { cwd: root, home: root, remote: true });
     const config = JSON.parse(await readFile(result.path, "utf8")) as { mcpServers: { sitepilot: Record<string, unknown> } };
     expect(config.mcpServers.sitepilot).toEqual({ type: "http", url: "https://example.com/wp-json/sitepilot-mcp/v2/mcp" });
-    expect(JSON.stringify(config)).not.toContain("example\"");
+
+    await writeClientConfig("claude-code", "example", "https://example.com/", {
+      cwd: root,
+      home: root,
+      remote: true,
+      scopes: ["site:read", "content:write"],
+    });
+    const pinned = JSON.parse(await readFile(result.path, "utf8")) as { mcpServers: { sitepilot: Record<string, unknown> } };
+    expect(pinned.mcpServers.sitepilot).toEqual({
+      type: "http",
+      url: "https://example.com/wp-json/sitepilot-mcp/v2/mcp",
+      oauth: { scopes: "site:read content:write" },
+    });
+    expect(JSON.stringify(pinned)).not.toContain("example\"");
     expect(await readFile(join(root, "CLAUDE.md"), "utf8")).toContain("awaiting_approval");
   });
 
@@ -71,7 +84,7 @@ describe("profile and client initialization", () => {
     const text = await readFile(configPath, "utf8");
     expect(text).toContain('model = "gpt-5.6-sol"');
     expect(text).toContain("[mcp_servers.existing]");
-    expect(text).toContain("sitepilot-mcp@0.1.3");
+    expect(text).toContain("sitepilot-mcp@0.1.4");
     expect(text).toContain('"example-next"');
     expect(text).not.toContain('"example-prod"');
     expect(text.match(/\[mcp_servers\.sitepilot\]/gu)).toHaveLength(1);
@@ -90,10 +103,13 @@ describe("profile and client initialization", () => {
       ["antigravity-cli", "written"],
       ["windsurf", "written"],
     ]);
+    expect(results.find(result => result.client === "codex")?.restart).toBe(
+      "Trust this project in Codex so .codex/config.toml loads. Restart the Codex session, then use /mcp to verify SitePilot.",
+    );
     const antigravityCli = JSON.parse(await readFile(join(root, ".agents", "mcp_config.json"), "utf8")) as { mcpServers: { sitepilot: Record<string, unknown> } };
     const windsurf = JSON.parse(await readFile(join(root, ".codeium", "windsurf", "mcp_config.json"), "utf8")) as { mcpServers: { sitepilot: Record<string, unknown> } };
     for (const server of [antigravityCli.mcpServers.sitepilot, windsurf.mcpServers.sitepilot]) {
-      expect(server).toMatchObject({ command: "npx", args: ["-y", "sitepilot-mcp@0.1.3", "--profile", "example"], env: { SITEPILOT_URL: "https://example.com/" } });
+      expect(server).toMatchObject({ command: "npx", args: ["-y", "sitepilot-mcp@0.1.4", "--profile", "example"], env: { SITEPILOT_URL: "https://example.com/" } });
       expect(JSON.stringify(server)).not.toContain("password");
     }
   });

@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, resolve } from "node:path";
+import type { Scope } from "@instantbuild-sitepilot/contracts";
 import { PACKAGE_VERSION } from "./version.js";
 
 export type ClientName = "claude-code" | "codex" | "cursor" | "antigravity-cli" | "antigravity-ide" | "claude-desktop" | "windsurf";
@@ -15,6 +16,7 @@ interface ClientConfigOptions {
   home?: string;
   appData?: string;
   remote?: boolean;
+  scopes?: readonly Scope[];
   installedVersion?: string;
   availableCommands?: readonly string[];
   localAppData?: string;
@@ -87,7 +89,7 @@ export function restartInstruction(client: ClientName): string {
   if (client === "cursor") return "Restart Cursor with Developer: Reload Window.";
   if (client === "claude-desktop") return "Quit and reopen Claude Desktop.";
   if (client === "claude-code") return "Restart the Claude Code session.";
-  if (client === "codex") return "Restart the Codex session, then use /mcp to verify SitePilot.";
+  if (client === "codex") return "Trust this project in Codex so .codex/config.toml loads. Restart the Codex session, then use /mcp to verify SitePilot.";
   if (client === "antigravity-cli") return "Restart agy, then use /mcp to verify SitePilot.";
   if (client === "antigravity-ide") return "Refresh MCP servers in Antigravity Settings → Customizations, then start a new Agent session.";
   return "Restart Windsurf with Reload Window.";
@@ -165,7 +167,14 @@ function mcpEndpoint(url: string): string {
 function jsonServer(client: Exclude<ClientName, "codex">, profile: string, url: string, options: ClientConfigOptions): Record<string, unknown> {
   if (options.remote) {
     const endpoint = mcpEndpoint(url);
-    if (client === "claude-code" || client === "claude-desktop") return { type: "http", url: endpoint };
+    if (client === "claude-code") {
+      return {
+        type: "http",
+        url: endpoint,
+        ...(options.scopes?.length ? { oauth: { scopes: options.scopes.join(" ") } } : {}),
+      };
+    }
+    if (client === "claude-desktop") return { type: "http", url: endpoint };
     if (client === "antigravity-cli" || client === "antigravity-ide") return { serverUrl: endpoint };
     if (client === "windsurf") return { url: endpoint, transport: "http" };
     return { url: endpoint };
