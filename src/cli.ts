@@ -4,10 +4,10 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Scope } from "@instantbuild-sitepilot/contracts";
 import { OAuthStrategy } from "./auth/oauth.js";
-import { deleteProfile, readProfiles, resolveConfig, type ConfigInput } from "./config.js";
+import { deleteProfile, readProfiles, resolveConfig, type ConfigInput, type StoredProfile } from "./config.js";
 import { diagnose } from "./doctor.js";
 import { assertSecureSiteUrl, normalizeSiteUrl } from "./discovery.js";
-import { initializeClients, normalizeClientSelection } from "./init.js";
+import { initializeClients, normalizeClientSelection, type ClientSelection } from "./init.js";
 import { login, parseScopeList } from "./login.js";
 import { runPreflight } from "./preflight.js";
 import { RemoteMcpClient } from "./proxy.js";
@@ -55,6 +55,21 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else result[name] = inline ?? args.shift();
   }
   return result as unknown as ParsedArgs;
+}
+
+export function initScopeSelection(value: string | undefined, profile: StoredProfile | undefined): Scope[] | undefined {
+  if (value !== undefined) return parseScopeList(value);
+  const granted = profile?.auth.scopes;
+  return granted?.length ? [...new Set(granted)] : undefined;
+}
+
+export function assertInitScopeClient(client: ClientSelection, value: string | undefined): void {
+  if (value !== undefined && client !== "claude-code") throw new Error("sitepilot-mcp init --scopes is supported only with --client claude-code.");
+}
+
+export function assertProfileMatchesRemote(name: string, profile: StoredProfile | undefined, remoteUrl: string): void {
+  const profileUrl = profile ? normalizeSiteUrl(profile.url).toString() : undefined;
+  if (profileUrl && profileUrl !== remoteUrl) throw new Error(`Profile ${name} belongs to ${profileUrl}, not ${remoteUrl}.`);
 }
 
 function print(value: unknown): void {
@@ -122,22 +137,31 @@ async function main(): Promise<void> {
     return;
   }
   if (args.command === "init") {
+    if (args.scopes !== undefined && !args.remote) throw new Error("sitepilot-mcp init --scopes requires --remote.");
+    const client = normalizeClientSelection(args.client ?? "all");
+    if (!client) throw new Error("--client must be claude-code, claude-desktop, codex, cursor, agy, antigravity-cli, antigravity-ide, windsurf, major, or all.");
+    assertInitScopeClient(client, args.scopes);
     let name = args.profile ?? process.env.SITEPILOT_PROFILE;
     let url: string;
+    let storedProfile: StoredProfile | undefined;
     if (args.remote && args.url) {
       const remoteUrl = normalizeSiteUrl(args.url);
       assertSecureSiteUrl(remoteUrl);
       url = remoteUrl.toString();
       name ??= `remote-${remoteUrl.hostname.replace(/[^a-z0-9-]+/giu, "-").toLowerCase()}`;
+      storedProfile = (await readProfiles()).profiles[name];
+      assertProfileMatchesRemote(name, storedProfile, url);
     } else {
       if (!name) throw new Error("sitepilot-mcp init requires --profile, or --remote with --url.");
-      const profile = (await readProfiles()).profiles[name];
-      if (!profile) throw new Error(`Profile ${name} does not exist. Run sitepilot-mcp login first.`);
-      url = profile.url;
+      storedProfile = (await readProfiles()).profiles[name];
+      if (!storedProfile) throw new Error(`Profile ${name} does not exist. Run sitepilot-mcp login first.`);
+      url = storedProfile.url;
     }
-    const client = normalizeClientSelection(args.client ?? "all");
-    if (!client) throw new Error("--client must be claude-code, claude-desktop, codex, cursor, agy, antigravity-cli, antigravity-ide, windsurf, major, or all.");
-    const results = await initializeClients(client, name, url, { remote: args.remote ?? false });
+    const scopes = initScopeSelection(args.scopes, storedProfile);
+    const results = await initializeClients(client, name, url, {
+      remote: args.remote ?? false,
+      ...(scopes ? { scopes } : {}),
+    });
     for (const result of results) {
       if (result.status === "skipped") print(`${result.client}: skipped (${result.reason})`);
       else print(`${result.client}: ${result.path}${result.rulesPath ? ` + ${result.rulesPath}` : ""}${result.backup ? ` (backup ${result.backup})` : ""}`);
