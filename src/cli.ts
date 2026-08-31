@@ -64,7 +64,9 @@ export function initScopeSelection(value: string | undefined, profile: StoredPro
 }
 
 export function assertInitScopeClient(client: ClientSelection, value: string | undefined): void {
-  if (value !== undefined && client !== "claude-code") throw new Error("sitepilot-mcp init --scopes is supported only with --client claude-code.");
+  if (value !== undefined && client !== "claude-code" && client !== "antigravity-cli" && client !== "antigravity-ide") {
+    throw new Error("sitepilot-mcp init --scopes is supported only with --client claude-code, antigravity-cli, or antigravity-ide.");
+  }
 }
 
 export function assertProfileMatchesRemote(name: string, profile: StoredProfile | undefined, remoteUrl: string): void {
