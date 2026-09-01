@@ -26,11 +26,10 @@ describe("CLI initialization scope selection", () => {
 
   it("rejects explicit scope ceilings for clients that cannot encode them", () => {
     expect(() => assertInitScopeClient("claude-code", "site:read")).not.toThrow();
-    expect(() => assertInitScopeClient("antigravity-cli", "site:read")).not.toThrow();
-    expect(() => assertInitScopeClient("antigravity-ide", "site:read")).not.toThrow();
     expect(() => assertInitScopeClient("codex", undefined)).not.toThrow();
-    expect(() => assertInitScopeClient("codex", "site:read")).toThrow("--scopes is supported only with --client claude-code, antigravity-cli, or antigravity-ide");
-    expect(() => assertInitScopeClient("major", "site:read")).toThrow("--scopes is supported only with --client claude-code, antigravity-cli, or antigravity-ide");
+    for (const client of ["antigravity-cli", "antigravity-ide", "codex", "major"] as const) {
+      expect(() => assertInitScopeClient(client, "site:read")).toThrow("--scopes is supported only with --client claude-code");
+    }
   });
 
   it("reuses profile scopes only for the same normalized remote URL", () => {
