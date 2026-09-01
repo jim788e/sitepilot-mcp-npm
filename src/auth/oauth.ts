@@ -158,6 +158,7 @@ export async function authorizeOAuth(
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "none",
+        scope: scopes.join(" "),
       }),
     });
     const verifier = base64Url(randomBytes(48));

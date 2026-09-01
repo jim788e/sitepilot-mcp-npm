@@ -175,12 +175,7 @@ function jsonServer(client: Exclude<ClientName, "codex">, profile: string, url: 
       };
     }
     if (client === "claude-desktop") return { type: "http", url: endpoint };
-    if (client === "antigravity-cli" || client === "antigravity-ide") {
-      return {
-        serverUrl: endpoint,
-        oauth: { scopes: [...(options.scopes?.length ? options.scopes : ["site:read"])] },
-      };
-    }
+    if (client === "antigravity-cli" || client === "antigravity-ide") return { serverUrl: endpoint };
     if (client === "windsurf") return { url: endpoint, transport: "http" };
     return { url: endpoint };
   }

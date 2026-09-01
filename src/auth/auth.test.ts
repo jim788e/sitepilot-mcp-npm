@@ -97,7 +97,11 @@ describe("authentication strategies", () => {
     });
     expect(credentials).toMatchObject({ clientId: "registered-client", accessToken: "access", refreshToken: "refresh", scopes: ["site:read", "design:write"] });
     const registration = JSON.parse(String(requests.find(request => request.url.endsWith("/register"))?.init?.body)) as Record<string, unknown>;
-    expect(registration).toMatchObject({ token_endpoint_auth_method: "none", grant_types: ["authorization_code", "refresh_token"] });
+    expect(registration).toMatchObject({
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      scope: "site:read design:write",
+    });
     const tokenBody = new URLSearchParams(String(requests.find(request => request.url.endsWith("/token"))?.init?.body));
     expect(tokenBody.get("code_verifier")).toHaveLength(64);
     expect(tokenBody.get("resource")).toBe("https://example.com/wp-json/sitepilot-mcp/v2/mcp");

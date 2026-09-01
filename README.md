@@ -13,7 +13,7 @@ npx sitepilot-mcp init --client cursor --profile wordpress-example
 
 Restart the client after `init`. Application Password login is the default; add `--oauth` for OAuth 2.1 with PKCE. Saved secrets live in `~/.config/sitepilot/profiles.json`, are written with mode `0600` where the OS supports it, and are referenced—not copied—by generated client configuration.
 
-The quick start intentionally resolves the current npm release. The generated client configuration does not: `init` writes the exact installed package version (for example, `sitepilot-mcp@0.1.5`) so a client restart cannot silently change the executable.
+The quick start intentionally resolves the current npm release. The generated client configuration does not: `init` writes the exact installed package version (for example, `sitepilot-mcp@0.1.6`) so a client restart cannot silently change the executable.
 
 Run directly without a saved profile:
 
@@ -47,7 +47,7 @@ npx sitepilot-mcp init --client codex --remote --url https://wordpress.example
 
 That writes only the HTTPS MCP URL and transport. The npm command and local profile reference are omitted. The WordPress plugin also advertises editable site playbooks through `prompts/list`; bodies are fetched lazily with `prompts/get`, labelled as untrusted site-authored instructions, and never grant scope or approval.
 
-Claude Code uses OAuth discovery when no scopes are supplied. To cap its request deliberately, pass `init --client claude-code --remote --scopes site:read,content:write`; the generated string-form `oauth.scopes` value is a ceiling, not a hint. Antigravity CLI and IDE request every advertised scope when their configuration omits a ceiling, so SitePilot generates their array-form `oauth.scopes` with `site:read` by default; pass `init --client antigravity-cli --remote --scopes site:read,content:write` or select `antigravity-ide` to widen that grant deliberately. A later plain remote `init` narrows either Antigravity entry back to `site:read`. The flag is rejected for every other client selection, including `major` and `all`, because those generated formats do not encode an equivalent ceiling. When `--profile` names a saved credential and `--scopes` is omitted, `init` reuses that profile's granted scopes only if its normalized site URL matches the requested remote URL; a mismatch stops before any client configuration is written. For either Antigravity surface, those matching profile scopes replace the read-only default.
+Claude Code uses OAuth discovery when no scopes are supplied. To cap its request deliberately, pass `init --client claude-code --remote --scopes site:read,content:write`; the generated string-form `oauth.scopes` value is a ceiling, not a hint. Antigravity CLI and IDE accept only the documented URL-only remote shape; their documented `oauth` object is for client credentials and has no scope field. SitePilot therefore enforces their least-privilege default at the WordPress authorization server: a dynamically registered client that omits RFC 7591 `scope` is registered with `site:read`, and any broader authorization request is reduced to that ceiling before consent and token issue. Clients that intentionally need more authority must include the desired space-separated `scope` in Dynamic Client Registration. The npm adapter does this during `login --oauth`; its generated Antigravity configuration remains URL-only. `init --scopes` is rejected for every client except Claude Code because the other generated formats do not encode an equivalent ceiling. For Claude Code, when `--profile` names a saved credential and `--scopes` is omitted, `init` reuses that profile's granted scopes only if its normalized site URL matches the requested remote URL; a mismatch stops before any client configuration is written.
 
 Zed, Cline, Warp, Continue, OpenCode, VS Code with Copilot, and other standards-compatible clients can use the same exact-version stdio command or canonical remote URL. They are generic MCP compatibility targets until their own real-install acceptance run is recorded; they are not silently counted as passed by the five-client matrix.
 
@@ -57,7 +57,7 @@ Zed, Cline, Warp, Continue, OpenCode, VS Code with Copilot, and other standards-
 sitepilot-mcp login --url <url> [--oauth] [--scopes a,b] [--label text]
 sitepilot-mcp logout --profile <name>
 sitepilot-mcp init --client claude-code|claude-desktop|codex|cursor|agy|antigravity-cli|antigravity-ide|windsurf|major|all (--profile <name> | --remote --url <url>)
-sitepilot-mcp init --client claude-code|antigravity-cli|antigravity-ide --remote (--profile <name> | --url <url>) [--scopes a,b]
+sitepilot-mcp init --client claude-code --remote (--profile <name> | --url <url>) [--scopes a,b]
 sitepilot-mcp doctor --url <url>
 sitepilot-mcp tools --url <url> [--json]
 sitepilot-mcp call <tool> --input @plan.json [--dry-run]
